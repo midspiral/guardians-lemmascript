@@ -40,6 +40,9 @@ branches are themselves full workflows, so conditionals nest to any depth
   faithful AST: for any branch-choice function, a concrete run that ends tainted
   was already flagged statically — at every nesting depth. Structural induction
   composing branch soundness with `taintWfMonotone` over the continuation.
+- **`leaksWfSound`** — the actual taint *rule* ("does tainted data reach a
+  *sink*?"), not just taint flow, proved sound over the nested AST. This is the
+  taint decision the adapter calls with a proof behind it.
 
 ### `src/prov_core.ts` — per-source provenance (the real Guardians analysis)
 
@@ -88,15 +91,22 @@ functions (`provAfter`, `reachesErrorAbstract`). This is the verified-core +
 thin-adapter split — the adapter is what a faithful, *verified* reduction would
 eventually replace.
 
+The adapter reports two taint verdicts: `taintPrecise` (binding provenance, via
+`provAfter`) and `taintWf` (the **proved** `leaksWf` over the real AST).
+
 `compare/diff.sh` runs our `verify()` and the real Python `guardians.verify()` on
-the example's safe and malicious email-agent workflows and diffs the verdicts:
+five email-agent scenarios (incl. a *nested-conditional* leak and a source-then-
+literal-send) and compares:
 
 ```sh
 # one-time: cd ../guardians && python3 -m venv .venv && .venv/bin/pip install -e .
 ./compare/diff.sh
 ```
 
-The two agree on `{ok, taint, automaton}` for both scenarios. Python additionally
-reports a `precondition` violation on the malicious workflow — the Z3 check this
-project deliberately does not model — which is a coverage gap, not a
-disagreement.
+Results: `taintPrecise` and `automaton` **match Python exactly** on all five,
+including the nested-conditional case (so `wf_core`'s nesting is validated against
+the reference). The proved `taintWf` is a **sound over-approximation**: it flags
+every taint Python flags, and is conservatively stronger on exactly one scenario
+(`fetchThenLiteralSend` — a sink that runs after a source but does not consume its
+data). Python additionally reports a `precondition` category on external sends —
+the Z3 check this project does not model (a coverage gap, not a disagreement).

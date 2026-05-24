@@ -92,3 +92,91 @@ export function taintWfSound(
   //@ ensures taintWfConcrete(introduces, sanitizes, chooseThen, t0, wf) ==> taintWf(introduces, sanitizes, t0, wf)
   return true;
 }
+
+// The actual taint RULE, not just taint flow: does tainted data reach a SINK
+// tool anywhere in the workflow? A sink reached while the taint bit is set is a
+// leak; a conditional leaks if either branch leaks, and its branch-taint flows
+// into the continuation. `isSink` marks sink tools. (This is the order/control
+// model — coarser than data-provenance taint, but it is what we prove sound.)
+export function leaksWf(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  t0: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ decreases wf
+  if (wf.kind === "done") return false;
+  if (wf.kind === "tool") {
+    const here = isSink(wf.tool) && t0;
+    const next = sanitizes(wf.tool) ? false : t0 || introduces(wf.tool);
+    return here || leaksWf(introduces, sanitizes, isSink, next, wf.rest);
+  }
+  const branched = taintWf(introduces, sanitizes, t0, wf.thenB) || taintWf(introduces, sanitizes, t0, wf.elseB);
+  return (
+    leaksWf(introduces, sanitizes, isSink, t0, wf.thenB) ||
+    leaksWf(introduces, sanitizes, isSink, t0, wf.elseB) ||
+    leaksWf(introduces, sanitizes, isSink, branched, wf.rest)
+  );
+}
+
+// Concrete run: a conditional leaks via the single branch it actually takes.
+export function leaksWfConcrete(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  chooseThen: (wf: Wf) => boolean,
+  t0: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ decreases wf
+  if (wf.kind === "done") return false;
+  if (wf.kind === "tool") {
+    const here = isSink(wf.tool) && t0;
+    const next = sanitizes(wf.tool) ? false : t0 || introduces(wf.tool);
+    return here || leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, next, wf.rest);
+  }
+  const branchLeak = chooseThen(wf)
+    ? leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf.thenB)
+    : leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf.elseB);
+  const branched = chooseThen(wf)
+    ? taintWfConcrete(introduces, sanitizes, chooseThen, t0, wf.thenB)
+    : taintWfConcrete(introduces, sanitizes, chooseThen, t0, wf.elseB);
+  return branchLeak || leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, branched, wf.rest);
+}
+
+// Leak detection is monotone in incoming taint. Pure carrier.
+export function leaksWfMonotone(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  t0a: boolean,
+  t0b: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ requires t0a ==> t0b
+  //@ ensures leaksWf(introduces, sanitizes, isSink, t0a, wf) ==> leaksWf(introduces, sanitizes, isSink, t0b, wf)
+  return true;
+}
+
+// THE verified taint-rule check over the real nested AST: if any concrete run
+// leaks tainted data to a sink, the static check already flagged it. So a clean
+// `leaksWf` verdict rules out a tainted sink on every path, at every nesting
+// depth — this is the taint decision the adapter can call with a proof behind it.
+// Pure carrier; structural induction composing branch soundness, taintWfSound,
+// and the two monotonicity lemmas over the continuation.
+export function leaksWfSound(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  chooseThen: (wf: Wf) => boolean,
+  t0: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ ensures leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf) ==> leaksWf(introduces, sanitizes, isSink, t0, wf)
+  return true;
+}

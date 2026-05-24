@@ -84,3 +84,93 @@ lemma taintWfSound_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, 
       taintWfMonotone_ensures(introduces, sanitizes, concBranched, absBranched, rest);
   }
 }
+
+function leaksWf(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0: bool, wf: Wf): bool
+  decreases wf
+{
+  match wf {
+    case done =>
+      false
+    case tool(i_wf_tool, i_wf_rest) =>
+      var here := (isSink(i_wf_tool) && t0);
+      var next := (if sanitizes(i_wf_tool) then false else (t0 || introduces(i_wf_tool)));
+      (here || leaksWf(introduces, sanitizes, isSink, next, i_wf_rest))
+    case cond(i_wf_thenB, i_wf_elseB, i_wf_rest) =>
+      var branched := (taintWf(introduces, sanitizes, t0, i_wf_thenB) || taintWf(introduces, sanitizes, t0, i_wf_elseB));
+      ((leaksWf(introduces, sanitizes, isSink, t0, i_wf_thenB) || leaksWf(introduces, sanitizes, isSink, t0, i_wf_elseB)) || leaksWf(introduces, sanitizes, isSink, branched, i_wf_rest))
+  }
+}
+
+function leaksWfConcrete(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, chooseThen: (Wf) -> bool, t0: bool, wf: Wf): bool
+  decreases wf
+{
+  match wf {
+    case done =>
+      false
+    case tool(i_wf_tool, i_wf_rest) =>
+      var here := (isSink(i_wf_tool) && t0);
+      var next := (if sanitizes(i_wf_tool) then false else (t0 || introduces(i_wf_tool)));
+      (here || leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, next, i_wf_rest))
+    case cond(i_wf_thenB, i_wf_elseB, i_wf_rest) =>
+      var branchLeak := (if chooseThen(wf) then leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, i_wf_thenB) else leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, i_wf_elseB));
+      var branched := (if chooseThen(wf) then taintWfConcrete(introduces, sanitizes, chooseThen, t0, i_wf_thenB) else taintWfConcrete(introduces, sanitizes, chooseThen, t0, i_wf_elseB));
+      (branchLeak || leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, branched, i_wf_rest))
+  }
+}
+
+function leaksWfMonotone(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0a: bool, t0b: bool, wf: Wf): bool
+  requires (t0a ==> t0b)
+{
+  true
+}
+
+lemma leaksWfMonotone_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0a: bool, t0b: bool, wf: Wf)
+  requires (t0a ==> t0b)
+  ensures (leaksWf(introduces, sanitizes, isSink, t0a, wf) ==> leaksWf(introduces, sanitizes, isSink, t0b, wf))
+  decreases wf
+{
+  match wf {
+    case done =>
+    case tool(t, rest) =>
+      leaksWfMonotone_ensures(introduces, sanitizes, isSink,
+        (if sanitizes(t) then false else (t0a || introduces(t))),
+        (if sanitizes(t) then false else (t0b || introduces(t))),
+        rest);
+    case cond(thenB, elseB, rest) =>
+      leaksWfMonotone_ensures(introduces, sanitizes, isSink, t0a, t0b, thenB);
+      leaksWfMonotone_ensures(introduces, sanitizes, isSink, t0a, t0b, elseB);
+      taintWfMonotone_ensures(introduces, sanitizes, t0a, t0b, thenB);
+      taintWfMonotone_ensures(introduces, sanitizes, t0a, t0b, elseB);
+      leaksWfMonotone_ensures(introduces, sanitizes, isSink,
+        (taintWf(introduces, sanitizes, t0a, thenB) || taintWf(introduces, sanitizes, t0a, elseB)),
+        (taintWf(introduces, sanitizes, t0b, thenB) || taintWf(introduces, sanitizes, t0b, elseB)),
+        rest);
+  }
+}
+
+function leaksWfSound(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, chooseThen: (Wf) -> bool, t0: bool, wf: Wf): bool
+{
+  true
+}
+
+lemma leaksWfSound_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, chooseThen: (Wf) -> bool, t0: bool, wf: Wf)
+  ensures (leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf) ==> leaksWf(introduces, sanitizes, isSink, t0, wf))
+  decreases wf
+{
+  match wf {
+    case done =>
+    case tool(t, rest) =>
+      leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen,
+        (if sanitizes(t) then false else (t0 || introduces(t))),
+        rest);
+    case cond(thenB, elseB, rest) =>
+      leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen, t0, thenB);
+      leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen, t0, elseB);
+      taintWfSound_ensures(introduces, sanitizes, chooseThen, t0, thenB);
+      taintWfSound_ensures(introduces, sanitizes, chooseThen, t0, elseB);
+      var concBranched := (if chooseThen(wf) then taintWfConcrete(introduces, sanitizes, chooseThen, t0, thenB) else taintWfConcrete(introduces, sanitizes, chooseThen, t0, elseB));
+      var absBranched := (taintWf(introduces, sanitizes, t0, thenB) || taintWf(introduces, sanitizes, t0, elseB));
+      leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen, concBranched, rest);
+      leaksWfMonotone_ensures(introduces, sanitizes, isSink, concBranched, absBranched, rest);
+  }
+}
