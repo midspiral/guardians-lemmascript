@@ -72,8 +72,31 @@ so there is no condition DSL.
 ## Verify
 
 ```sh
-for f in taint_core prov_core automaton_core; do
+for f in taint_core prov_core automaton_core wf_core; do
   node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/$f.ts
 done
 ../LemmaScript/tools/check.sh dafny
 ```
+
+## Running it, and diffing against Python
+
+`src/verify.ts` is a small **unverified adapter**: it maps a Guardians-style
+`Workflow`/`Policy` onto the verified cores and returns a verdict in the same
+shape as Python's `guardians.verify()`. The dataflow tracing and policy encoding
+are plain glue; the taint and automaton *decisions* are made by the proved
+functions (`provAfter`, `reachesErrorAbstract`). This is the verified-core +
+thin-adapter split — the adapter is what a faithful, *verified* reduction would
+eventually replace.
+
+`compare/diff.sh` runs our `verify()` and the real Python `guardians.verify()` on
+the example's safe and malicious email-agent workflows and diffs the verdicts:
+
+```sh
+# one-time: cd ../guardians && python3 -m venv .venv && .venv/bin/pip install -e .
+./compare/diff.sh
+```
+
+The two agree on `{ok, taint, automaton}` for both scenarios. Python additionally
+reports a `precondition` violation on the malicious workflow — the Z3 check this
+project deliberately does not model — which is a coverage gap, not a
+disagreement.
