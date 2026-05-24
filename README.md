@@ -91,6 +91,56 @@ so there is no condition DSL.
   concrete run never reaches an error state, for *any* data. This is what lets
   Guardians admit a workflow before it runs.
 
+## What a passing verdict guarantees — and what it doesn't
+
+The headline theorem is **`verifyWfSound`** in [`src/wf_core.ts`](src/wf_core.ts)
+(its inductive proof is the additions-only diff in
+[`src/wf_core.dfy`](src/wf_core.dfy) over the generated `src/wf_core.dfy.gen`).
+Its `//@ ensures`, in full:
+
+```
+verifyWf(introduces, sanitizes, isSink, isTarget, t0, wf)
+  ==> ( !leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf)
+        && !reachesTargetWfConcrete(isTarget, chooseThen, wf) )
+```
+
+with **all** of `introduces, sanitizes, isSink, isTarget, chooseThen, t0, wf`
+universally quantified. In words: for every workflow, every assignment of which
+tools are sources / sanitizers / sinks / guarded targets, every starting taint,
+and every way the conditionals branch at runtime (`chooseThen`) — if the static
+check `verifyWf` passes, that execution neither feeds tainted data into a sink nor
+fires a guarded tool. Quantifying `chooseThen` makes this hold on **every path**.
+
+Every property in this repo follows the same triple, so the code is easy to read:
+
+| role | functions (e.g. for the leak rule) |
+|---|---|
+| **abstract** checker (runs on the plan) | `leaksWf`, `reachesTargetWf` |
+| **concrete** semantics (what a run does) | `leaksWfConcrete`, `reachesTargetWfConcrete` |
+| **soundness** lemma (abstract ⊇ concrete) | `leaksWfSound`, `reachesTargetWfSound` |
+
+The `//@ ensures` on a function in the `.ts` is the *claim*; the inductive *proof*
+lives in the matching `.dfy` (the lines it adds over `.dfy.gen`).
+
+It is verified for **all inputs** — but *relative to* four things this repo does
+**not** prove:
+
+1. **The trusted base** — Dafny + Z3, and `lsc`'s TypeScript→Dafny translation (a
+   tech preview, itself unverified). No amount of proof here gets past this.
+2. **The model** — the theorem relates the abstract checker to the *concrete
+   semantics defined in this repo* (`leaksWfConcrete`, …), not to a real agent
+   runtime; and `leaksWf` is order-based taint (coarser than data-flow), with the
+   automaton specialised to the single-target shape.
+3. **The adapter** — a real `Workflow`/`Policy` reaches the cores only through the
+   **unverified** glue in [`src/verify.ts`](src/verify.ts); the [`compare/`](compare/)
+   differential test against Python is *testing*, not proof.
+4. **Scope** — taint + single-target automaton only; Guardians' Z3
+   preconditions/frame conditions, allowlist, and scope checks are not modeled.
+
+So a green `check.sh` proves the **checker's logic is sound** — a passing verdict
+cannot under-report a leak or a guarded-tool firing *in this model* — not that the
+real Guardians, or any deployed agent, is safe.
+
 ## Verify
 
 ```sh
