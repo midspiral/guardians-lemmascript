@@ -41,11 +41,26 @@ label). A rule fires only for a source actually present; sanitizers are per-rule
   propagates transitively through multi-input tools. The per-label structure is
   also why sanitizing one source leaves the others intact.
 
+### `src/automaton_core.ts` — security automata
+
+Guardians' other check: a policy is a finite automaton over the tool-call
+sequence, with guarded transitions to error states. At verification time a
+guard's truth is unknown (symbolic args), so the static analysis explores *both*
+outcomes; the concrete run follows the actual guard. Guards are HOF parameters,
+so there is no condition DSL.
+
+- **`automatonSound`** — the static reachability over-approximates the concrete
+  one: if any concrete run reaches an error state, the static checker (exploring
+  all guard choices) already found a path to error.
+- **`automatonSafeVerdict`** — the usable form: a clean static verdict means the
+  concrete run never reaches an error state, for *any* data. This is what lets
+  Guardians admit a workflow before it runs.
+
 ## Verify
 
 ```sh
-node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/taint_core.ts
-node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/prov_core.ts
-dafny verify src/taint_core.dfy && dafny verify src/prov_core.dfy
-# or: ../LemmaScript/tools/check.sh dafny
+for f in taint_core prov_core automaton_core; do
+  node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/$f.ts
+done
+../LemmaScript/tools/check.sh dafny
 ```
