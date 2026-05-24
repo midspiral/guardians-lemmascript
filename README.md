@@ -28,6 +28,19 @@ so every theorem holds for *any* assignment.
   out a tainted sink on **every** path. (Composes per-block soundness with
   `workflowAbstractMonotone`, which leans on `taintMonotone`.)
 
+### `src/wf_core.ts` — nested conditionals over the real recursive AST
+
+`workflowSound` above models a conditional's branches as *linear* pipelines.
+This file removes that restriction: a workflow is a recursive datatype
+`Wf = done | tool(tool, rest) | cond(thenB, elseB, rest)` where a conditional's
+branches are themselves full workflows, so conditionals nest to any depth
+(recursion is structural, as in `examples/preorder.ts`).
+
+- **`taintWfSound`** — the over-approximation soundness, re-proved over this
+  faithful AST: for any branch-choice function, a concrete run that ends tainted
+  was already flagged statically — at every nesting depth. Structural induction
+  composing branch soundness with `taintWfMonotone` over the continuation.
+
 ### `src/prov_core.ts` — per-source provenance (the real Guardians analysis)
 
 Taint becomes a *set of source labels* in a value's lineage (represented

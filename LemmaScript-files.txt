@@ -1,3 +1,4 @@
 src/taint_core.ts
 src/prov_core.ts
 src/automaton_core.ts
+src/wf_core.ts
