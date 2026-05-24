@@ -10,24 +10,42 @@ Dafny. The Python repo serves as the reference oracle, not a porting target.
 
 ## What is verified
 
-`src/taint_core.ts` — the taint check over a **linear pipeline** of tool calls,
-with a single boolean label. A tool's effect on taint is given by two
-higher-order parameters, so the proofs hold for any source/sanitizer assignment:
+Tools' source/sanitizer behaviour is always passed as higher-order parameters,
+so every theorem holds for *any* assignment.
+
+### `src/taint_core.ts` — taint over a workflow, single boolean label
 
 - **`taintMonotone`** — more incoming taint can only mean more outgoing taint;
-  the pipeline never loses track of upstream taint except through a sanitizer.
+  taint is never lost except through a sanitizer.
 - **`noSanitizerKeepsTaint`** — without a sanitizer downstream, tainted data
-  stays tainted: a `fetch`(source) → `send`(sink) workflow is provably flagged.
-- **`endSanitizerClean`** — a sanitizer (e.g. `redact`) as the final step clears
-  taint: the fix is accepted, and accepted for a real reason, not vacuously.
+  stays tainted: a `fetch`(source) → `send`(sink) pipeline is provably flagged.
+- **`endSanitizerClean`** — a sanitizer (`redact`) as the final step clears
+  taint: the fix is accepted, and for a real reason, not vacuously.
+- **`workflowSound`** — with **conditionals** (`Block = tool | cond`), the static
+  check cannot know which branch runs, so it *over-approximates* by unioning both.
+  This proves the over-approximation is sound: for any branch choice, a concrete
+  run that ends tainted was already flagged statically — a clean verdict rules
+  out a tainted sink on **every** path. (Composes per-block soundness with
+  `workflowAbstractMonotone`, which leans on `taintMonotone`.)
 
-The soundness here is *tight* (no branching yet). The genuine over-approximation
-content — conditionals/loops where the static check must union both branches,
-then label-sets and per-source provenance — is the next increment.
+### `src/prov_core.ts` — per-source provenance (the real Guardians analysis)
+
+Taint becomes a *set of source labels* in a value's lineage (represented
+per-label, so the set is the family over `lbl`; `introduces`/`sanitizes` take the
+label). A rule fires only for a source actually present; sanitizers are per-rule.
+
+- **`introducedSourcePresent`** — a source introduced anywhere with no sanitizer
+  downstream reaches the end (the rule fires for genuinely-present sources).
+- **`joinFlagsContributingSource`** — the payoff: a **join** (a tool consuming
+  several inputs) is tainted by a source if *any* input carried it, so taint
+  propagates transitively through multi-input tools. The per-label structure is
+  also why sanitizing one source leaves the others intact.
 
 ## Verify
 
 ```sh
 node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/taint_core.ts
-dafny verify src/taint_core.dfy
+node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/prov_core.ts
+dafny verify src/taint_core.dfy && dafny verify src/prov_core.dfy
+# or: ../LemmaScript/tools/check.sh dafny
 ```
