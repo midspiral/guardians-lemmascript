@@ -1,7 +1,7 @@
 # guardians-lemmascript
 
 A LemmaScript verification of the core safety argument behind
-[Guardians](../guardians) (Erik Meijer, ["Guardians of the Agents", CACM
+[Guardians](https://github.com/metareflection/guardians) (Erik Meijer, ["Guardians of the Agents", CACM
 Jan 2026](https://cacm.acm.org/practice/guardians-of-the-agents/)): an agent's
 tool workflow is checked *before* it runs so that tainted data from a `source`
 tool can never reach a `sink` parameter. Guardians itself is Python; this is a
