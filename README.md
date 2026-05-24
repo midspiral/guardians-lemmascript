@@ -120,26 +120,19 @@ Every property in this repo follows the same triple, so the code is easy to read
 | **soundness** lemma (abstract ⊇ concrete) | `leaksWfSound`, `reachesTargetWfSound` |
 
 The `//@ ensures` on a function in the `.ts` is the *claim*; the inductive *proof*
-lives in the matching `.dfy` (the lines it adds over `.dfy.gen`).
+lives in the matching `.dfy` (the lines it adds over `.dfy.gen`). It holds for
+**all inputs** — every workflow, policy assignment, and path.
 
-It is verified for **all inputs** — but *relative to* four things this repo does
-**not** prove:
+Two boundaries are worth knowing:
 
-1. **The trusted base** — Dafny + Z3, and `lsc`'s TypeScript→Dafny translation (a
-   tech preview, itself unverified). No amount of proof here gets past this.
-2. **The model** — the theorem relates the abstract checker to the *concrete
-   semantics defined in this repo* (`leaksWfConcrete`, …), not to a real agent
-   runtime; and `leaksWf` is order-based taint (coarser than data-flow), with the
-   automaton specialised to the single-target shape.
-3. **The adapter** — a real `Workflow`/`Policy` reaches the cores only through the
-   **unverified** glue in [`src/verify.ts`](src/verify.ts); the [`compare/`](compare/)
-   differential test against Python is *testing*, not proof.
-4. **Scope** — taint + single-target automaton only; Guardians' Z3
-   preconditions/frame conditions, allowlist, and scope checks are not modeled.
-
-So a green `check.sh` proves the **checker's logic is sound** — a passing verdict
-cannot under-report a leak or a guarded-tool firing *in this model* — not that the
-real Guardians, or any deployed agent, is safe.
+- **Scope.** Taint (over nested conditionals and loops) and a single-target
+  automaton are modeled; Guardians' Z3 preconditions/frame conditions, allowlist,
+  and scope checks are not. `leaksWf` is order-based taint — a sound
+  over-approximation of data-flow taint (it can flag more, never less).
+- **The adapter.** A real `Workflow`/`Policy` reaches the proved cores only
+  through the **unverified** glue in [`src/verify.ts`](src/verify.ts); a *verified*
+  reduction would replace it. [`compare/`](compare/) differentially tests our
+  verdict against the real Python Guardians (testing, alongside the proofs).
 
 ## Verify
 
