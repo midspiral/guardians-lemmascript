@@ -180,3 +180,84 @@ export function leaksWfSound(
   //@ ensures leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf) ==> leaksWf(introduces, sanitizes, isSink, t0, wf)
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Unified verifier: taint (leaksWf) AND a security automaton, over the real AST.
+//
+// The automaton here is the demo's shape — a single absorbing error transition on
+// a target tool under a symbolic guard (e.g. no_external_send on send_email). For
+// that shape, "an error is reachable" is exactly "the target tool occurs on some
+// path", which — because tool membership decomposes over branch-then-continuation
+// — needs no state threading and no set-of-states: a clean structural recursion.
+// (automaton_core.ts proves the GENERAL automaton over-approximation, over
+// sequences; this is its Wf-level lifting for the single-target shape.)
+
+// Static: does a target tool occur on ANY path of the workflow?
+export function reachesTargetWf(isTarget: (tool: number) => boolean, wf: Wf): boolean {
+  //@ verify
+  //@ decreases wf
+  if (wf.kind === "done") return false;
+  if (wf.kind === "tool") return isTarget(wf.tool) || reachesTargetWf(isTarget, wf.rest);
+  return reachesTargetWf(isTarget, wf.thenB) || reachesTargetWf(isTarget, wf.elseB) || reachesTargetWf(isTarget, wf.rest);
+}
+
+// Concrete: does a target tool occur on the TAKEN path? (membership over the
+// chosen branch then the continuation — both checked independently.)
+export function reachesTargetWfConcrete(
+  isTarget: (tool: number) => boolean,
+  chooseThen: (wf: Wf) => boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ decreases wf
+  if (wf.kind === "done") return false;
+  if (wf.kind === "tool") return isTarget(wf.tool) || reachesTargetWfConcrete(isTarget, chooseThen, wf.rest);
+  const branch = chooseThen(wf)
+    ? reachesTargetWfConcrete(isTarget, chooseThen, wf.thenB)
+    : reachesTargetWfConcrete(isTarget, chooseThen, wf.elseB);
+  return branch || reachesTargetWfConcrete(isTarget, chooseThen, wf.rest);
+}
+
+// The taken path is one of the workflow's paths, so a target on it is a target
+// on some path. Pure carrier; structural induction.
+export function reachesTargetWfSound(
+  isTarget: (tool: number) => boolean,
+  chooseThen: (wf: Wf) => boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ ensures reachesTargetWfConcrete(isTarget, chooseThen, wf) ==> reachesTargetWf(isTarget, wf)
+  return true;
+}
+
+// The unified STATIC verdict: no taint leak to a sink, and no automaton target
+// reachable. This is the Wf-level analogue of Python's guardians.verify().ok.
+export function verifyWf(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  isTarget: (tool: number) => boolean,
+  t0: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  return !leaksWf(introduces, sanitizes, isSink, t0, wf) && !reachesTargetWf(isTarget, wf);
+}
+
+// THE CAPSTONE. A clean unified verdict rules out, on EVERY concrete path: a taint
+// leak to a sink AND an automaton error. Both safety properties from one static
+// check over the real nested/looping-free AST. Pure carrier; composes
+// leaksWfSound and reachesTargetWfSound.
+export function verifyWfSound(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  isTarget: (tool: number) => boolean,
+  chooseThen: (wf: Wf) => boolean,
+  t0: boolean,
+  wf: Wf,
+): boolean {
+  //@ verify
+  //@ ensures verifyWf(introduces, sanitizes, isSink, isTarget, t0, wf) ==> (!leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf) && !reachesTargetWfConcrete(isTarget, chooseThen, wf))
+  return true;
+}

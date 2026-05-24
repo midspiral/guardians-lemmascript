@@ -43,6 +43,12 @@ branches are themselves full workflows, so conditionals nest to any depth
 - **`leaksWfSound`** — the actual taint *rule* ("does tainted data reach a
   *sink*?"), not just taint flow, proved sound over the nested AST. This is the
   taint decision the adapter calls with a proof behind it.
+- **`verifyWfSound`** — the **capstone**: a single unified static check
+  (`verifyWf` = no taint leak ∧ no automaton target reachable) rules out, on
+  *every* concrete path, both a leak to a sink and an automaton error. The
+  automaton here is the demo's shape (a target tool under a symbolic guard); since
+  "target reachable" is tool membership, it decomposes over branches with no
+  state-tracking. Composes `leaksWfSound` and `reachesTargetWfSound`.
 
 ### `src/loop_core.ts` — unbounded loops (a fixpoint over-approximation)
 

@@ -174,3 +174,67 @@ lemma leaksWfSound_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, 
       leaksWfMonotone_ensures(introduces, sanitizes, isSink, concBranched, absBranched, rest);
   }
 }
+
+function reachesTargetWf(isTarget: (int) -> bool, wf: Wf): bool
+  decreases wf
+{
+  match wf {
+    case done =>
+      false
+    case tool(i_wf_tool, i_wf_rest) =>
+      (isTarget(i_wf_tool) || reachesTargetWf(isTarget, i_wf_rest))
+    case cond(i_wf_thenB, i_wf_elseB, i_wf_rest) =>
+      ((reachesTargetWf(isTarget, i_wf_thenB) || reachesTargetWf(isTarget, i_wf_elseB)) || reachesTargetWf(isTarget, i_wf_rest))
+  }
+}
+
+function reachesTargetWfConcrete(isTarget: (int) -> bool, chooseThen: (Wf) -> bool, wf: Wf): bool
+  decreases wf
+{
+  match wf {
+    case done =>
+      false
+    case tool(i_wf_tool, i_wf_rest) =>
+      (isTarget(i_wf_tool) || reachesTargetWfConcrete(isTarget, chooseThen, i_wf_rest))
+    case cond(i_wf_thenB, i_wf_elseB, i_wf_rest) =>
+      var branch := (if chooseThen(wf) then reachesTargetWfConcrete(isTarget, chooseThen, i_wf_thenB) else reachesTargetWfConcrete(isTarget, chooseThen, i_wf_elseB));
+      (branch || reachesTargetWfConcrete(isTarget, chooseThen, i_wf_rest))
+  }
+}
+
+function reachesTargetWfSound(isTarget: (int) -> bool, chooseThen: (Wf) -> bool, wf: Wf): bool
+{
+  true
+}
+
+lemma reachesTargetWfSound_ensures(isTarget: (int) -> bool, chooseThen: (Wf) -> bool, wf: Wf)
+  ensures (reachesTargetWfConcrete(isTarget, chooseThen, wf) ==> reachesTargetWf(isTarget, wf))
+  decreases wf
+{
+  match wf {
+    case done =>
+    case tool(t, rest) =>
+      reachesTargetWfSound_ensures(isTarget, chooseThen, rest);
+    case cond(thenB, elseB, rest) =>
+      reachesTargetWfSound_ensures(isTarget, chooseThen, thenB);
+      reachesTargetWfSound_ensures(isTarget, chooseThen, elseB);
+      reachesTargetWfSound_ensures(isTarget, chooseThen, rest);
+  }
+}
+
+function verifyWf(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, isTarget: (int) -> bool, t0: bool, wf: Wf): bool
+{
+  (!(leaksWf(introduces, sanitizes, isSink, t0, wf)) && !(reachesTargetWf(isTarget, wf)))
+}
+
+function verifyWfSound(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, isTarget: (int) -> bool, chooseThen: (Wf) -> bool, t0: bool, wf: Wf): bool
+{
+  true
+}
+
+lemma verifyWfSound_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, isTarget: (int) -> bool, chooseThen: (Wf) -> bool, t0: bool, wf: Wf)
+  ensures (verifyWf(introduces, sanitizes, isSink, isTarget, t0, wf) ==> (!(leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf)) && !(reachesTargetWfConcrete(isTarget, chooseThen, wf))))
+{
+  leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen, t0, wf);
+  reachesTargetWfSound_ensures(isTarget, chooseThen, wf);
+}
