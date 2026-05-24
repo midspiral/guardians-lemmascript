@@ -44,6 +44,19 @@ branches are themselves full workflows, so conditionals nest to any depth
   *sink*?"), not just taint flow, proved sound over the nested AST. This is the
   taint decision the adapter calls with a proof behind it.
 
+### `src/loop_core.ts` — unbounded loops (a fixpoint over-approximation)
+
+Guardians' AST also has a loop: a body that runs *some* number of times. Unlike a
+conditional (a finite branch union), a loop needs a **fixpoint** argument. The key
+fact: for a single taint bit with `bodyTaint` monotone, `sat = t0 ‖ bodyTaint(t0)`
+is a one-step **pre-fixpoint** (`bodyTaint(sat) ⟹ sat`), so it soundly bounds the
+taint after *any* iteration count — no iteration-to-fixpoint required.
+
+- **`loopExitSound`** — the taint after running the body `n` times is bounded by
+  `sat`, for every `n` (induction on `n`, via `bodyMonotone` + the pre-fixpoint).
+- **`loopLeakSound`** — if any iteration leaks, the body leaks from `sat`; so the
+  static check `leaksBody(sat, body)` rules out a leak at every iteration count.
+
 ### `src/prov_core.ts` — per-source provenance (the real Guardians analysis)
 
 Taint becomes a *set of source labels* in a value's lineage (represented
@@ -75,7 +88,7 @@ so there is no condition DSL.
 ## Verify
 
 ```sh
-for f in taint_core prov_core automaton_core wf_core; do
+for f in taint_core prov_core automaton_core wf_core loop_core; do
   node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/$f.ts
 done
 ../LemmaScript/tools/check.sh dafny
