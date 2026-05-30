@@ -2,6 +2,10 @@
 
 datatype Wf = done | tool(tool: int, rest: Wf) | cond(thenB: Wf, elseB: Wf, rest: Wf)
 
+datatype SrcStep = call(tool: int) | branch(thenB: SrcList, elseB: SrcList)
+
+datatype SrcList = nil | cons(head: SrcStep, tail: SrcList)
+
 function taintWf(introduces: (int) -> bool, sanitizes: (int) -> bool, t0: bool, wf: Wf): bool
   decreases wf
 {
@@ -237,4 +241,112 @@ lemma verifyWfSound_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool,
 {
   leaksWfSound_ensures(introduces, sanitizes, isSink, chooseThen, t0, wf);
   reachesTargetWfSound_ensures(isTarget, chooseThen, wf);
+}
+
+function buildWf(list: SrcList): Wf
+  decreases list
+{
+  match list {
+    case nil =>
+      Wf.done
+    case cons(i_list_head, i_list_tail) =>
+      var head := i_list_head;
+      match head {
+        case call(i_head_tool) =>
+          tool(i_head_tool, buildWf(i_list_tail))
+        case branch(i_head_thenB, i_head_elseB) =>
+          cond(buildWf(i_head_thenB), buildWf(i_head_elseB), buildWf(i_list_tail))
+      }
+  }
+}
+
+function taintSrc(introduces: (int) -> bool, sanitizes: (int) -> bool, t0: bool, list: SrcList): bool
+  decreases list
+{
+  match list {
+    case nil =>
+      t0
+    case cons(i_list_head, i_list_tail) =>
+      var head := i_list_head;
+      match head {
+        case call(i_head_tool) =>
+          var next := (if sanitizes(i_head_tool) then false else (t0 || introduces(i_head_tool)));
+          taintSrc(introduces, sanitizes, next, i_list_tail)
+        case branch(i_head_thenB, i_head_elseB) =>
+          var branched := (taintSrc(introduces, sanitizes, t0, i_head_thenB) || taintSrc(introduces, sanitizes, t0, i_head_elseB));
+          taintSrc(introduces, sanitizes, branched, i_list_tail)
+      }
+  }
+}
+
+function leaksSrc(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0: bool, list: SrcList): bool
+  decreases list
+{
+  match list {
+    case nil =>
+      false
+    case cons(i_list_head, i_list_tail) =>
+      var head := i_list_head;
+      match head {
+        case call(i_head_tool) =>
+          var here := (isSink(i_head_tool) && t0);
+          var next := (if sanitizes(i_head_tool) then false else (t0 || introduces(i_head_tool)));
+          (here || leaksSrc(introduces, sanitizes, isSink, next, i_list_tail))
+        case branch(i_head_thenB, i_head_elseB) =>
+          var branched := (taintSrc(introduces, sanitizes, t0, i_head_thenB) || taintSrc(introduces, sanitizes, t0, i_head_elseB));
+          ((leaksSrc(introduces, sanitizes, isSink, t0, i_head_thenB) || leaksSrc(introduces, sanitizes, isSink, t0, i_head_elseB)) || leaksSrc(introduces, sanitizes, isSink, branched, i_list_tail))
+      }
+  }
+}
+
+function taintSrcFaithful(introduces: (int) -> bool, sanitizes: (int) -> bool, t0: bool, list: SrcList): bool
+{
+  true
+}
+
+lemma taintSrcFaithful_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, t0: bool, list: SrcList)
+  ensures (taintWf(introduces, sanitizes, t0, buildWf(list)) == taintSrc(introduces, sanitizes, t0, list))
+  decreases list
+{
+  match list {
+    case nil =>
+    case cons(head, tail) =>
+      match head {
+        case call(t) =>
+          var next := (if sanitizes(t) then false else (t0 || introduces(t)));
+          taintSrcFaithful_ensures(introduces, sanitizes, next, tail);
+        case branch(thenB, elseB) =>
+          taintSrcFaithful_ensures(introduces, sanitizes, t0, thenB);
+          taintSrcFaithful_ensures(introduces, sanitizes, t0, elseB);
+          var branched := (taintSrc(introduces, sanitizes, t0, thenB) || taintSrc(introduces, sanitizes, t0, elseB));
+          taintSrcFaithful_ensures(introduces, sanitizes, branched, tail);
+      }
+  }
+}
+
+function leaksSrcFaithful(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0: bool, list: SrcList): bool
+{
+  true
+}
+
+lemma leaksSrcFaithful_ensures(introduces: (int) -> bool, sanitizes: (int) -> bool, isSink: (int) -> bool, t0: bool, list: SrcList)
+  ensures (leaksWf(introduces, sanitizes, isSink, t0, buildWf(list)) == leaksSrc(introduces, sanitizes, isSink, t0, list))
+  decreases list
+{
+  match list {
+    case nil =>
+    case cons(head, tail) =>
+      match head {
+        case call(t) =>
+          var next := (if sanitizes(t) then false else (t0 || introduces(t)));
+          leaksSrcFaithful_ensures(introduces, sanitizes, isSink, next, tail);
+        case branch(thenB, elseB) =>
+          leaksSrcFaithful_ensures(introduces, sanitizes, isSink, t0, thenB);
+          leaksSrcFaithful_ensures(introduces, sanitizes, isSink, t0, elseB);
+          taintSrcFaithful_ensures(introduces, sanitizes, t0, thenB);
+          taintSrcFaithful_ensures(introduces, sanitizes, t0, elseB);
+          var branched := (taintSrc(introduces, sanitizes, t0, thenB) || taintSrc(introduces, sanitizes, t0, elseB));
+          leaksSrcFaithful_ensures(introduces, sanitizes, isSink, branched, tail);
+      }
+  }
 }

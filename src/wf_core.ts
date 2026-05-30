@@ -261,3 +261,113 @@ export function verifyWfSound(
   //@ ensures verifyWf(introduces, sanitizes, isSink, isTarget, t0, wf) ==> (!leaksWfConcrete(introduces, sanitizes, isSink, chooseThen, t0, wf) && !reachesTargetWfConcrete(isTarget, chooseThen, wf))
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Marshalling: from a Guardians-style source workflow onto this `Wf` AST.
+//
+// The adapter (src/verify.ts) receives a workflow as a flat LIST of steps, where
+// a conditional step's two branches are THEMSELVES lists and a conditional does
+// NOT carry its own continuation (the continuation is the rest of the list). This
+// section proves that marshalling that source shape onto `Wf` — collapsing the
+// two-level list-of-steps into `Wf`'s unified one-level form — preserves the leak
+// verdict at ANY nesting depth. So the adapter can marshal with `buildWf` and
+// check with the PROVED `leaksWf` (above), knowing it answers the source
+// workflow's own question; composed with leaksWfSound (same module, same leaksWf)
+// a clean verdict rules out a tainted sink on every path. The mutually recursive
+// datatypes give Dafny structural termination over the nesting with no size measure.
+
+type SrcStep =
+  | { kind: "call"; tool: number }
+  | { kind: "branch"; thenB: SrcList; elseB: SrcList };
+
+type SrcList =
+  | { kind: "nil" }
+  | { kind: "cons"; head: SrcStep; tail: SrcList };
+
+// Marshal the source list onto the `Wf` AST: a conditional step becomes a `cond`
+// node whose `rest` is the marshalled continuation (the list's tail).
+export function buildWf(list: SrcList): Wf {
+  //@ verify
+  //@ decreases list
+  if (list.kind === "nil") return { kind: "done" };
+  const head = list.head;
+  if (head.kind === "call") return { kind: "tool", tool: head.tool, rest: buildWf(list.tail) };
+  return { kind: "cond", thenB: buildWf(head.thenB), elseB: buildWf(head.elseB), rest: buildWf(list.tail) };
+}
+
+// The source-level taint semantics (defined directly over the source list,
+// independently of the marshalling — the "right question" buildWf must preserve).
+export function taintSrc(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  t0: boolean,
+  list: SrcList,
+): boolean {
+  //@ verify
+  //@ decreases list
+  if (list.kind === "nil") return t0;
+  const head = list.head;
+  if (head.kind === "call") {
+    const next = sanitizes(head.tool) ? false : t0 || introduces(head.tool);
+    return taintSrc(introduces, sanitizes, next, list.tail);
+  }
+  const branched = taintSrc(introduces, sanitizes, t0, head.thenB) || taintSrc(introduces, sanitizes, t0, head.elseB);
+  return taintSrc(introduces, sanitizes, branched, list.tail);
+}
+
+// The source-level leak semantics (does tainted data reach a sink), over the list.
+export function leaksSrc(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  t0: boolean,
+  list: SrcList,
+): boolean {
+  //@ verify
+  //@ decreases list
+  if (list.kind === "nil") return false;
+  const head = list.head;
+  if (head.kind === "call") {
+    const here = isSink(head.tool) && t0;
+    const next = sanitizes(head.tool) ? false : t0 || introduces(head.tool);
+    return here || leaksSrc(introduces, sanitizes, isSink, next, list.tail);
+  }
+  const branched = taintSrc(introduces, sanitizes, t0, head.thenB) || taintSrc(introduces, sanitizes, t0, head.elseB);
+  return (
+    leaksSrc(introduces, sanitizes, isSink, t0, head.thenB) ||
+    leaksSrc(introduces, sanitizes, isSink, t0, head.elseB) ||
+    leaksSrc(introduces, sanitizes, isSink, branched, list.tail)
+  );
+}
+
+// Marshalling preserves taint, at every nesting depth. Pure carrier: the branch
+// case must invoke this lemma on the sub-lists (a Dafny function body cannot).
+export function taintSrcFaithful(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  t0: boolean,
+  list: SrcList,
+): boolean {
+  //@ verify
+  //@ ensures taintWf(introduces, sanitizes, t0, buildWf(list)) === taintSrc(introduces, sanitizes, t0, list)
+  return true;
+}
+
+// THE MARSHALLING THEOREM. The marshalled AST's PROVED leak check (leaksWf) agrees
+// with the source workflow's own leak semantics, for conditionals nested to ANY
+// depth — so buildWf does not distort the question leaksWf answers. Composed with
+// leaksWfSound (above, the same leaksWf), the adapter's marshalling + check is
+// backed end-to-end: a clean verdict rules out a tainted sink on every path.
+// Pure carrier; structural induction composing taintSrcFaithful and the leak
+// recursion over branches and continuation.
+export function leaksSrcFaithful(
+  introduces: (tool: number) => boolean,
+  sanitizes: (tool: number) => boolean,
+  isSink: (tool: number) => boolean,
+  t0: boolean,
+  list: SrcList,
+): boolean {
+  //@ verify
+  //@ ensures leaksWf(introduces, sanitizes, isSink, t0, buildWf(list)) === leaksSrc(introduces, sanitizes, isSink, t0, list)
+  return true;
+}

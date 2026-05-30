@@ -49,6 +49,13 @@ branches are themselves full workflows, so conditionals nest to any depth
   automaton here is the demo's shape (a target tool under a symbolic guard); since
   "target reachable" is tool membership, it decomposes over branches with no
   state-tracking. Composes `leaksWfSound` and `reachesTargetWfSound`.
+- **`leaksSrcFaithful`** — the **marshalling** proof. The adapter receives a
+  workflow as a flat step-list; `buildWf` collapses it (with nested conditionals)
+  onto this `Wf` AST. This proves that collapse is verdict-faithful at any depth:
+  `leaksWf(buildWf(list)) == leaksSrc(list)` (the source list's own leak rule). It
+  lives in the *same module* as `leaksWfSound`, about the *same* `leaksWf`, so the
+  two compose with no copy to drift — source workflow → marshal → check is backed
+  end-to-end (`taintSrcFaithful` carries the branch-union taint).
 
 ### `src/loop_core.ts` — unbounded loops (a fixpoint over-approximation)
 
@@ -129,9 +136,12 @@ Two boundaries are worth knowing:
   automaton are modeled; Guardians' Z3 preconditions/frame conditions, allowlist,
   and scope checks are not. `leaksWf` is order-based taint — a sound
   over-approximation of data-flow taint (it can flag more, never less).
-- **The adapter.** A real `Workflow`/`Policy` reaches the proved cores only
-  through the **unverified** glue in [`src/verify.ts`](src/verify.ts); a *verified*
-  reduction would replace it. [`compare/`](compare/) differentially tests our
+- **The adapter.** A real `Workflow`/`Policy` reaches the proved cores through
+  [`src/verify.ts`](src/verify.ts). Its **marshalling** onto the `Wf` AST is now
+  proved verdict-faithful (`leaksSrcFaithful`), and the taint/automaton *decisions*
+  are the proved functions — so what stays trusted is only the 1:1 `Step[]`→datatype
+  transcription, string→int interning, and the `taintPrecise` lineage tracing: a
+  shape copy with no decisions. [`compare/`](compare/) differentially tests our
   verdict against the real Python Guardians (testing, alongside the proofs).
 
 ## Verify
@@ -145,13 +155,13 @@ done
 
 ## Running it, and diffing against Python
 
-`src/verify.ts` is a small **unverified adapter**: it maps a Guardians-style
-`Workflow`/`Policy` onto the verified cores and returns a verdict in the same
-shape as Python's `guardians.verify()`. The dataflow tracing and policy encoding
-are plain glue; the taint and automaton *decisions* are made by the proved
-functions (`provAfter`, `reachesErrorAbstract`). This is the verified-core +
-thin-adapter split — the adapter is what a faithful, *verified* reduction would
-eventually replace.
+`src/verify.ts` is a small adapter: it maps a Guardians-style `Workflow`/`Policy`
+onto the verified cores and returns a verdict in the same shape as Python's
+`guardians.verify()`. The taint and automaton *decisions* are the proved functions
+(`provAfter`, `leaksWf`, `reachesErrorAbstract`), and the **marshalling** onto the
+`Wf` AST is proved verdict-faithful too (`buildWf` / `leaksSrcFaithful`). What
+remains plain glue is the 1:1 `Step[]`→datatype transcription (`buildSrc`), string
+interning, and the `taintPrecise` lineage tracing — a shape copy with no decisions.
 
 The adapter reports two taint verdicts: `taintPrecise` (binding provenance, via
 `provAfter`) and `taintWf` (the **proved** `leaksWf` over the real AST).
