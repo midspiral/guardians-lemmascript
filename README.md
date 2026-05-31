@@ -163,6 +163,44 @@ onto the verified cores and returns a verdict in the same shape as Python's
 remains plain glue is the 1:1 `Step[]`→datatype transcription (`buildSrc`), string
 interning, and the `taintPrecise` lineage tracing — a shape copy with no decisions.
 
+```
+                Guardians-style Workflow (steps: Step[]) + Policy
+                                     |
+  +----------------------------------------------------------------------+
+  |  src/verify.ts — ADAPTER  (trusted glue: shuffles shapes, makes no    |
+  |                            taint/automaton decision of its own)       |
+  |    idOf      tool-name string -> int                                  |
+  |    buildSrc  Step[] -> SrcList   (1:1 transcription)                  |
+  |    lineage   tools transitively feeding a sink argument               |
+  +------+--------------------+---------------------------+---------------+
+         | lineage chain      | SrcList                   | tool-id seq
+  =======|====================|===========================|==== TRUST BOUNDARY ==
+         v                    v                           v
+    provAfter           buildWf -> Wf              reachesErrorAbstract
+    (prov_core)         (wf_core)                  (automaton_core)
+    PROVED sound        PROVED faithful            PROVED sound
+         |              (leaksSrcFaithful)                |
+         |                   |                            |
+         |              leaksWf  (wf_core)                |
+         |              PROVED sound (leaksWfSound)       |
+         v                   v                            v
+    taintPrecise          taintWf                     automaton
+    data-flow taint,   proved-sound over-           finite-automaton
+    matches Python     approx (over-flags,          check, matches
+                       never misses)                Python
+         |                   |                            |
+         +-------------------+----------------------------+
+                             v
+       Verdict { ok = !(taintPrecise || automaton),  taintPrecise,
+                 taintWf,  automaton }
+                             v
+       compare/diff.sh  --  diffed scenario-by-scenario against
+                            real Python  guardians.verify()
+
+  Above the boundary: trusted glue, small enough to audit by eye.
+  Below: machine-checked by Dafny (59 proof obligations, 0 errors).
+```
+
 The adapter reports two taint verdicts: `taintPrecise` (binding provenance, via
 `provAfter`) and `taintWf` (the **proved** `leaksWf` over the real AST).
 

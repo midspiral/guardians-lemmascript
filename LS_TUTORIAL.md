@@ -366,6 +366,13 @@ sound. [`compare/`](compare/) closes the loop by differentially testing this rep
 verdicts against real Python Guardians, so the *model* is empirically tied to the
 *implementation* it abstracts.
 
+The whole split, and exactly where the trust boundary falls, is laid out in the
+**trust-boundary diagram** in the [`README`](README.md) ("Running it, and diffing
+against Python"): the adapter's trusted glue (`idOf`, `buildSrc`, `lineage`) above
+the line, the machine-checked cores (`buildWf`/`leaksWf`, `provAfter`,
+`reachesErrorAbstract`) below it, and the three verdicts fanning out to the
+`compare/` cross-check against Python.
+
 It is just as important to be precise about what the proof does **not** cover — the
 trust hasn't vanished, it has *moved* to three smaller, namable places:
 
