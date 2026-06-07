@@ -147,7 +147,7 @@ Two boundaries are worth knowing:
 ## Verify
 
 ```sh
-for f in taint_core prov_core automaton_core wf_core loop_core; do
+for f in taint_core prov_core automaton_core wf_core loop_core frame_core; do
   node ../LemmaScript/tools/dist/lsc.js regen --backend=dafny src/$f.ts
 done
 ../LemmaScript/tools/check.sh dafny

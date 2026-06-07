@@ -19,9 +19,9 @@
 // (buildSrc, a 1:1 shape copy), the lineage tracing for taintPrecise, and the
 // string->int tool interning. The marshalling into the Wf AST and the taint /
 // automaton DECISIONS are the proved functions. NOT modeled: Z3 preconditions.
-import { provAfter } from "./prov_core";
-import { buildWf, leaksWf } from "./wf_core";
-import { reachesErrorAbstract } from "./automaton_core";
+import { provAfter } from "./prov_core.ts";
+import { buildWf, leaksWf } from "./wf_core.ts";
+import { reachesErrorAbstract } from "./automaton_core.ts";
 
 export type SymRef = { ref: string };
 export type Arg = SymRef | string | number;

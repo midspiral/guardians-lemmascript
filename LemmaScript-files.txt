@@ -3,3 +3,4 @@ src/prov_core.ts
 src/automaton_core.ts
 src/wf_core.ts
 src/loop_core.ts
+src/frame_core.ts

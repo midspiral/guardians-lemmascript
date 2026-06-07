@@ -4,6 +4,7 @@
 import { taintAfter, workflowAbstract, workflowConcrete } from "./src/taint_core.ts";
 import { provAfter } from "./src/prov_core.ts";
 import { reachesErrorAbstract, reachesErrorConcrete } from "./src/automaton_core.ts";
+import { framePreserved, nonVacuous } from "./src/frame_core.ts";
 
 // Tool ids: 0=fetch_mail (source), 2=send_email (sink), 3=redact (sanitizer).
 const introduces = (t: number) => t === 0;
@@ -41,3 +42,16 @@ const externalRecipient = () => true; // concrete: this send is external
 console.log("static: send_email reachable-to-error?", reachesErrorAbstract(isError, nextOn, 0, [99])); // true
 console.log("concrete (external recipient) errors?  ", reachesErrorConcrete(isError, nextOn, externalRecipient, 0, [99])); // true
 console.log("static: workflow with no send safe?    ", !reachesErrorAbstract(isError, nextOn, 0, [])); // true
+
+console.log("\n== frame conditions (delete_file overreach) ==");
+// File ids: 1=foo.txt, 2=bar.txt. Pre: both present (content 1). The agent was told
+// to delete foo.txt; an over-broad delete_file("*") wipes BOTH files.
+const files = [1, 2];
+const pre = (f: number) => (f === 1 || f === 2 ? 1 : 0);
+const postOverbroad = (_f: number) => 0; // wiped foo AND bar
+const star = (_f: number) => true; // frame from pattern "*"
+const scoped = (f: number) => f === 1; // frame = just foo.txt
+console.log('"*" frame protects anything?          ', nonVacuous(star, files)); // false: protects nothing
+console.log("scoped {foo} frame protects anything? ", nonVacuous(scoped, files)); // true
+console.log('"*" frame accepts the over-delete?    ', framePreserved(pre, postOverbroad, star, files)); // true: WAVED THROUGH
+console.log("scoped frame accepts the over-delete? ", framePreserved(pre, postOverbroad, scoped, files)); // false: CAUGHT (bar changed, ∉ frame)
