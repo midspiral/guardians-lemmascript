@@ -27,3 +27,14 @@ export type Verdict = { ok: boolean; taintPrecise: boolean; taintWf: boolean; au
 // faithful) and runs the proved checks. Consumers gate on the PROVED `taintWf` /
 // `automaton` fields, not `ok` (which folds in the unverified `taintPrecise`).
 export function verify(wf: Workflow, policy: Policy): Verdict;
+
+// Proved security-automaton reachability (automaton_core). Over-approximates the concrete
+// run (explores both guard outcomes); `automatonSound` proves a clean verdict
+// (`!reachesErrorAbstract`) means no concrete path reaches an error state. Consumers build
+// their own automaton (isError / nextOn) and token sequence.
+export function reachesErrorAbstract(
+  isError: (state: number) => boolean,
+  nextOn: (state: number, tool: number, guard: boolean) => number,
+  state: number,
+  tools: number[],
+): boolean;

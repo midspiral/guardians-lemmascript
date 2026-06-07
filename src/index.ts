@@ -23,3 +23,8 @@ export type {
   Policy,
   Verdict,
 } from "./verify.ts";
+
+// The proved security-automaton reachability (automaton_core), for consumers that want
+// to enforce a sequence/ordering policy directly: `automatonSound` proves a clean static
+// verdict (`!reachesErrorAbstract`) means no concrete run reaches an error state.
+export { reachesErrorAbstract } from "./automaton_core.ts";
