@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "types": "./index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.ts"
+    },
     "./*": "./src/*.ts"
   },
   "scripts": {
