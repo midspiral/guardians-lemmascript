@@ -1,5 +1,8 @@
 # guardians-lemmascript
 
+[![LemmaScript: verified](https://img.shields.io/badge/LemmaScript-verified-brightgreen)](https://github.com/midspiral/guardians-lemmascript/actions/workflows/lemmascript.yml)
+
+
 A LemmaScript verification of the core safety argument behind
 [Guardians](https://github.com/metareflection/guardians) (Erik Meijer, ["Guardians of the Agents", CACM
 Jan 2026](https://cacm.acm.org/practice/guardians-of-the-agents/)): an agent's
