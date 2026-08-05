@@ -253,7 +253,7 @@ function buildWf(list: SrcList): Wf
       var head := i_list_head;
       match head {
         case call(i_head_tool) =>
-          tool(i_head_tool, buildWf(i_list_tail))
+          Wf.tool(i_head_tool, buildWf(i_list_tail))
         case branch(i_head_thenB, i_head_elseB) =>
           cond(buildWf(i_head_thenB), buildWf(i_head_elseB), buildWf(i_list_tail))
       }
